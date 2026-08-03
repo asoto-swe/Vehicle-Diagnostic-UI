@@ -2,6 +2,8 @@ pub const SID_DIAGNOSTIC_SESSION_CONTROL: u8 = 0x10;
 pub const SID_CLEAR_DIAGNOSTIC_INFORMATION: u8 = 0x14;
 pub const SID_READ_DTC_INFORMATION: u8 = 0x19;
 pub const SID_READ_DATA_BY_IDENTIFIER: u8 = 0x22;
+pub const SID_SECURITY_ACCESS: u8 = 0x27;
+pub const SID_ROUTINE_CONTROL: u8 = 0x31;
 pub const NEGATIVE_RESPONSE_SID: u8 = 0x7F;
 
 pub const SESSION_DEFAULT: u8 = 0x01;
@@ -9,15 +11,51 @@ pub const SESSION_EXTENDED: u8 = 0x03;
 
 pub const REPORT_DTC_BY_STATUS_MASK: u8 = 0x02;
 
+pub const SECURITY_REQUEST_SEED: u8 = 0x01;
+pub const SECURITY_SEND_KEY: u8 = 0x02;
+
+pub const ROUTINE_START: u8 = 0x01;
+pub const ROUTINE_STOP: u8 = 0x02;
+pub const ROUTINE_REQUEST_RESULTS: u8 = 0x03;
+
 pub const NRC_SERVICE_NOT_SUPPORTED: u8 = 0x11;
 pub const NRC_SUBFUNCTION_NOT_SUPPORTED: u8 = 0x12;
 pub const NRC_REQUEST_OUT_OF_RANGE: u8 = 0x31;
+pub const NRC_SECURITY_ACCESS_DENIED: u8 = 0x33;
+pub const NRC_INVALID_KEY: u8 = 0x35;
+
+// ISO 14229-1 DTC status mask bits (subset we actually use).
+pub const DTC_STATUS_TEST_FAILED: u8 = 0x01;
+pub const DTC_STATUS_PENDING: u8 = 0x04;
+pub const DTC_STATUS_CONFIRMED: u8 = 0x08;
 
 #[derive(Clone, Copy)]
 pub struct Dtc {
     /// 3-byte DTC number as it appears on the wire, e.g. 0x0A8000.
     pub code: u32,
     pub status: u8,
+}
+
+/// Shared response encoders so each simulated ECU doesn't hand-roll the same
+/// framing. Business logic (which DTCs, which DIDs) stays in ecus/*.rs.
+pub fn negative_response(sid: u8, nrc: u8) -> Vec<u8> {
+    vec![NEGATIVE_RESPONSE_SID, sid, nrc]
+}
+
+pub fn build_session_control_response(sub: u8) -> Vec<u8> {
+    // SID+0x40, subfunction echo, P2 (ms, 2 bytes), P2* (x10ms, 2 bytes)
+    vec![SID_DIAGNOSTIC_SESSION_CONTROL + 0x40, sub, 0x00, 0x32, 0x01, 0xF4]
+}
+
+pub fn build_dtc_scan_response(dtcs: &[Dtc]) -> Vec<u8> {
+    let mut resp = vec![SID_READ_DTC_INFORMATION + 0x40, REPORT_DTC_BY_STATUS_MASK, 0xFF];
+    for dtc in dtcs {
+        resp.push(((dtc.code >> 16) & 0xFF) as u8);
+        resp.push(((dtc.code >> 8) & 0xFF) as u8);
+        resp.push((dtc.code & 0xFF) as u8);
+        resp.push(dtc.status);
+    }
+    resp
 }
 
 pub struct SimulatedEcu {
@@ -103,8 +141,4 @@ impl Default for SimulatedEcu {
     fn default() -> Self {
         Self::new()
     }
-}
-
-fn negative_response(sid: u8, nrc: u8) -> Vec<u8> {
-    vec![NEGATIVE_RESPONSE_SID, sid, nrc]
 }

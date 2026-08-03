@@ -1,0 +1,7 @@
+[package]
+name = "uds-transport"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+socketcan = "3.6"
